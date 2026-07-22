@@ -15,7 +15,6 @@ collected from any vessel.
 |---|---|---|---|
 | `uci-cbm` | UCI *Condition Based Maintenance of Naval Propulsion Plants* (Coraddu et al., 2014) | CC BY 4.0 | Engine fuel map for Speed Optimization |
 | `nasa-cmapss` | NASA C-MAPSS turbofan degradation (Saxena et al., 2008) | Public domain (US Gov) | Pretraining the Phase 1 anomaly detector |
-| `femto-bearing` | FEMTO-ST / PRONOSTIA bearing run-to-failure (Nectoux et al., 2012) | Public domain (NASA PCoE) | Pretraining the vibration branch (IMU channels) |
 | `natural-earth-coastline` | Natural Earth 10m physical coastline | Public domain | Chart geometry on the bridge display |
 | Open-Meteo Marine API | open-meteo.com | CC BY 4.0, free tier | Live and historical wind, wave, current |
 | GEBCO | GEBCO global bathymetry grid | Public, attribution required | Depth safety constraint |
