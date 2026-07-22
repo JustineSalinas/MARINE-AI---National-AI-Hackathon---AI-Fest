@@ -1,0 +1,40 @@
+# Data — never committed. Fetch with `python -m data.download`.
+/data/raw/
+/data/processed/
+*.csv
+*.parquet
+*.nc
+*.zip
+
+# Model artifacts — regenerate with `python -m services.<module>.train`
+/models/**/*.json
+/models/**/*.pt
+/models/**/*.onnx
+/models/**/*.pkl
+!/models/**/MODEL_CARD.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+
+# Env — never commit keys. Public repo.
+.env
+.env.local
+.env*.local
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

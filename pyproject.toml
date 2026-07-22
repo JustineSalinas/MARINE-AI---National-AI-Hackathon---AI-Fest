@@ -1,0 +1,68 @@
+[project]
+name = "marine-ai"
+version = "0.1.0"
+description = "Retrofittable IoT + AI advisory system for Philippine diesel passenger boats"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+
+dependencies = [
+    # API
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sse-starlette>=2.1",
+    "httpx>=0.27",
+    # Storage
+    "psycopg[binary]>=3.2",
+    "sqlalchemy>=2.0",
+    # Data
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=17.0",
+    # Models
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+    # Transport (local edge path)
+    "paho-mqtt>=2.1",
+    # Utility
+    "python-dotenv>=1.0",
+    "typer>=0.12",
+    "rich>=13.9",
+]
+
+[project.optional-dependencies]
+# Heavy deep-learning deps. Not needed to run the API against trained artifacts.
+train = [
+    "torch>=2.4",
+    "pytorch-forecasting>=1.1",
+    "lightning>=2.4",
+    "scikit-survival>=0.23",
+    "onnx>=1.17",
+    "onnxruntime>=1.19",
+    "skl2onnx>=1.17",
+]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apps", "packages", "services"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
