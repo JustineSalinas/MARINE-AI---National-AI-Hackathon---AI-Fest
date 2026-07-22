@@ -64,7 +64,13 @@ right tool on each side:
 | Layer | Method | Justification |
 |---|---|---|
 | Conditions → required shaft power | **Physics**: hull resistance model (calm-water resistance + added resistance from wind, waves, current, and displacement from passenger/cargo load) | These relationships are well established in naval architecture and require no training data. Pretending to learn them from data that does not contain them would be worse, not better. |
-| Shaft power + RPM + engine health → fuel flow | **XGBoost**, trained on `uci-cbm` | This is exactly what the dataset contains, at 11,934 points across the full load and degradation range. Real ground-truth fuel flow, genuinely nonlinear, well suited to gradient boosting. |
+| Shaft power + load → healthy fuel burn | **Engine-maker BSFC curve**, two named coefficients | A marine diesel's part-load curve is published data. The gas-turbine dataset's own part-load curve is wrong for a diesel by a factor of five — see below. |
+| Engine condition → fuel penalty | **XGBoost**, trained on `uci-cbm` | This is exactly what the dataset contains, densely: 1,326 distinct wear states. Real ground-truth fuel flow, genuinely nonlinear, well suited to gradient boosting. |
+
+**Shaft RPM is not a feature.** The technical profile calls RPM a fuel
+predictor. In this dataset it is not an independent one: within a lever position
+RPM varies by 0.01 rpm, so it is a relabelling of load, and including it would
+add a feature that looks informative and carries nothing.
 
 This is a **hybrid physics-ML model**, and it is a stronger design than pure ML,
 not a weaker one. Use ML where there is ground truth; use physics where there is
@@ -85,15 +91,53 @@ connection, a measured one.
 is used as a documented proxy because it is the only public dataset pairing shaft
 torque, RPM, ship speed, and ground-truth fuel flow at this resolution.
 
-The transfer assumption is that the **shape** of the load-to-burn relationship
-holds across both prime movers: burn rises super-linearly with shaft power, and
-the efficient band sits below maximum rated RPM. The **absolute** litres-per-hour
-values do not transfer; they are rescaled to the target vessel's rated power via
-brake-specific fuel consumption.
+**Only the dimensionless wear penalty is transferred.** Not the fuel level, and
+not the part-load curve either.
 
-This is stated in the README, in the model card, and belongs on a pitch deck
-slide. A judge who discovers it in the repository unprompted will weight it far
-more heavily than one who was told.
+That second exclusion is the one that matters, and it is measured rather than
+assumed. In `uci-cbm` the gas turbine burns roughly **7×** its best-point
+specific fuel consumption at 10% load. A marine diesel at 10% load burns about
+**1.5×**. Borrowing the turbine's part-load shape would have overstated the
+savings from slowing down by about a factor of five — in the product's own
+favour, which is precisely the direction a judge should be suspicious of. So the
+healthy-burn curve comes from published diesel part-load data
+(`services/speed/fuel.py`), and the dataset is used only for what it uniquely
+contains:
+
+> at the same shaft load, how much more fuel does a **worn** engine burn than a
+> healthy one?
+
+That question is prime-mover-agnostic in form, densely sampled here (1,326 wear
+states), and validated in `services/speed/train.py` against wear states held out
+of training entirely. The observed penalty reaches **+7.9%** of fuel.
+
+The transfer is still an assumption and is labelled as one, in the README, in
+`models/fuel_degradation.card.json`, and on a pitch deck slide. A judge who
+discovers it in the repository unprompted will weight it far more heavily than
+one who was told.
+
+### What the model is validated against
+
+A random train/test split over a factorial grid leaks: every held-out row sits
+0.001 of a decay coefficient from a training row, and any model scores near
+perfectly without having generalised. The split is therefore over **whole wear
+states** — 25% of the (compressor, turbine) decay pairs are never seen in
+training. Against those:
+
+| Model | Mean error, as % of fuel burn |
+|---|---|
+| Assume every engine is healthy (what a system with no fuel map does) | 5.02% |
+| Linear regression | 0.64% |
+| **XGBoost** | **0.09%** |
+
+The first row is the size of the problem; the gap between the last two is why a
+gradient-booster is used rather than a straight line. Both baselines are
+computed on every training run and printed, so if the tree ever stops earning
+its complexity that will be visible rather than assumed.
+
+The honest weakness: load is sampled at only **7 distinct points**. The wear
+axis is dense and trustworthy; the load axis is interpolated between coarse
+steps. This is recorded in `known_limits` in the model card.
 
 ---
 

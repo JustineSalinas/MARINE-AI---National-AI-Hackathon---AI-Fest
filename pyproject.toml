@@ -24,6 +24,7 @@ dependencies = [
     # Models
     "scikit-learn>=1.5",
     "xgboost>=2.1",
+    "joblib>=1.4",  # trained-artifact serialisation
     # Transport (local edge path)
     "paho-mqtt>=2.1",
     # Utility

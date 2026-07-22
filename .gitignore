@@ -11,6 +11,7 @@
 /models/**/*.pt
 /models/**/*.onnx
 /models/**/*.pkl
+/models/**/*.joblib
 !/models/**/MODEL_CARD.md
 
 # Python
