@@ -21,7 +21,9 @@ class SpeedRecommendation(BaseModel):
 
     # What to do
     recommended_rpm: float = Field(ge=0, description="The setting the captain should move to.")
-    recommended_speed_kn: float = Field(ge=0, description="Expected speed through water at that RPM.")
+    recommended_speed_kn: float = Field(
+        ge=0, description="Expected speed through water at that RPM."
+    )
 
     # What is happening now
     current_rpm: float | None = Field(None, ge=0)

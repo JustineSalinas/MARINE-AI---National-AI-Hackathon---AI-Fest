@@ -17,20 +17,20 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from statistics import fmean, pstdev
 
 from packages.contracts import TelemetryFrame
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     ACCEPT = "accept"
     ACCEPT_FLAGGED = "accept_flagged"
     """Usable for live display, excluded from training."""
     REJECT = "reject"
 
 
-class FlagCode(str, Enum):
+class FlagCode(StrEnum):
     OUT_OF_RANGE = "out_of_range"
     TIMESTAMP_NAIVE = "timestamp_naive"
     TIMESTAMP_FUTURE = "timestamp_future"
@@ -148,7 +148,13 @@ class VesselValidator:
         if frame.ts > reference + self.future_tolerance:
             return Result(
                 Verdict.REJECT, None,
-                (Flag(FlagCode.TIMESTAMP_FUTURE, "ts", f"{frame.ts.isoformat()} is in the future"),),
+                (
+                    Flag(
+                        FlagCode.TIMESTAMP_FUTURE,
+                        "ts",
+                        f"{frame.ts.isoformat()} is in the future",
+                    ),
+                ),
             )
 
         if frame.ts in self._seen_ts:
@@ -163,12 +169,20 @@ class VesselValidator:
                 # hides a clock problem that will corrupt every RUL calculation.
                 return Result(
                     Verdict.REJECT, None,
-                    (Flag(FlagCode.TIMESTAMP_REGRESSED, "ts",
-                          f"{frame.ts.isoformat()} precedes last accepted {self._last_ts.isoformat()}"),),
+                    (
+                        Flag(
+                            FlagCode.TIMESTAMP_REGRESSED,
+                            "ts",
+                            f"{frame.ts.isoformat()} precedes last accepted "
+                            f"{self._last_ts.isoformat()}",
+                        ),
+                    ),
                 )
             gap = frame.ts - self._last_ts
             if gap > self.max_gap:
-                flags.append(Flag(FlagCode.GAP, "ts", f"{gap.total_seconds():.0f}s since last frame"))
+                flags.append(
+                    Flag(FlagCode.GAP, "ts", f"{gap.total_seconds():.0f}s since last frame")
+                )
 
         # --- Range. Contract bounds already ran at parse time; this catches
         # cross-field impossibility the schema cannot express. ---
@@ -213,8 +227,12 @@ class VesselValidator:
                 continue
             if abs(value - mean) > self.drift_sigma * sigma:
                 flags.append(
-                    Flag(FlagCode.SENSOR_DRIFT, path,
-                         f"{value:.2f} is {abs(value - mean) / sigma:.1f} sigma from baseline {mean:.2f}")
+                    Flag(
+                        FlagCode.SENSOR_DRIFT,
+                        path,
+                        f"{value:.2f} is {abs(value - mean) / sigma:.1f} sigma "
+                        f"from baseline {mean:.2f}",
+                    )
                 )
 
         self._commit(frame)
@@ -263,9 +281,11 @@ class VoyageReport:
             return None
         if self.total == 0:
             return "no frames"
+        ranked = sorted(self.flag_counts.items(), key=lambda kv: -kv[1])[:3]
+        top = ", ".join(f"{c.value}x{n}" for c, n in ranked)
         return (
             f"{self.rejected / self.total:.1%} rejected, {self.flagged / self.total:.1%} flagged "
-            f"({', '.join(f'{c.value}x{n}' for c, n in sorted(self.flag_counts.items(), key=lambda kv: -kv[1])[:3])})"
+            f"({top})"
         )
 
 

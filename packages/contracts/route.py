@@ -28,7 +28,9 @@ class Waypoint(BaseModel):
     eta: datetime | None = None
     leg_distance_nm: float | None = Field(None, ge=0)
     recommended_rpm: float | None = Field(
-        None, ge=0, description="Per-leg throttle. Route and speed are solved together, not separately."
+        None,
+        ge=0,
+        description="Per-leg throttle. Route and speed are solved together, not separately.",
     )
 
     # Forecast along this leg, from the TFT
@@ -55,7 +57,9 @@ class RouteRecommendation(BaseModel):
 
     # The delta against the obvious alternative
     baseline_distance_nm: float | None = Field(
-        None, ge=0, description="Great-circle direct route -- what the captain would otherwise steer."
+        None,
+        ge=0,
+        description="Great-circle direct route -- what the captain would otherwise steer.",
     )
     baseline_burn_l: float | None = Field(None, ge=0)
     savings_l: float | None = Field(

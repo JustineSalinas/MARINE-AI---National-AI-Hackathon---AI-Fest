@@ -7,7 +7,6 @@ magnitude, not just "returns a number".
 Reference vessel: a 12 m fiberglass passenger boat of the kind these routes run.
 """
 
-import math
 
 import pytest
 

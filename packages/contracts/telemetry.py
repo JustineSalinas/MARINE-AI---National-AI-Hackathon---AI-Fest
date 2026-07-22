@@ -13,7 +13,7 @@ this is the difference between a demo and a system that survives a real install.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,7 +23,7 @@ Longitude = Annotated[float, Field(ge=-180, le=180)]
 Compass = Annotated[float, Field(ge=0, lt=360)]
 
 
-class HullType(str, Enum):
+class HullType(StrEnum):
     FIBERGLASS_MONOHULL = "fiberglass_monohull"
     FIBERGLASS_OUTRIGGER = "fiberglass_outrigger"  # bangka / pumpboat
     STEEL_MONOHULL = "steel_monohull"
@@ -41,7 +41,10 @@ class ThrottlingFrame(BaseModel):
         None, ge=0, description="Ground truth burn rate. Trains and validates the fuel model."
     )
     throttle_position_pct: float | None = Field(
-        None, ge=0, le=100, description="Actual captain input. Closes the advice/action feedback loop."
+        None,
+        ge=0,
+        le=100,
+        description="Actual captain input. Closes the advice/action feedback loop.",
     )
 
     # Recommended additions (profile 3.2)
@@ -56,7 +59,9 @@ class ThrottlingFrame(BaseModel):
     wind_speed_kn: float | None = Field(None, ge=0)
     wind_direction_deg: Compass | None = Field(None, description="Direction wind is coming FROM.")
     current_speed_kn: float | None = Field(None, ge=0)
-    current_direction_deg: Compass | None = Field(None, description="Direction current is flowing TOWARD.")
+    current_direction_deg: Compass | None = Field(
+        None, description="Direction current is flowing TOWARD."
+    )
     tide_level_m: float | None = None
 
 

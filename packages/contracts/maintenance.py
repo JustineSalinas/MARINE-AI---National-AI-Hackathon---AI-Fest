@@ -15,12 +15,12 @@ unrepresentable is cheaper than remembering.
 from __future__ import annotations
 
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class MaintenancePhase(str, Enum):
+class MaintenancePhase(StrEnum):
     """Maturity of this vessel's model. Not a global setting -- it is per vessel."""
 
     PHASE_1_COLD_START = "phase_1_cold_start"
@@ -43,10 +43,15 @@ class AnomalyStream(BaseModel):
     reconstruction_error: float = Field(ge=0, description="Autoencoder error for this stream.")
     z_score: float = Field(description="Deviation from the learned baseline, in sigmas.")
     contribution_pct: float = Field(
-        ge=0, le=100, description="Share of the total anomaly score. Ranks the strip on the display."
+        ge=0,
+        le=100,
+        description="Share of the total anomaly score. Ranks the strip on the display.",
     )
     trend_minutes: float | None = Field(
-        None, ge=0, description="How long this stream has been deviating. Drift reads differently from a spike."
+        None,
+        ge=0,
+        description="How long this stream has been deviating. "
+        "Drift reads differently from a spike.",
     )
 
 
@@ -59,7 +64,9 @@ class MaintenanceStatus(BaseModel):
 
     # --- Phase 1 and Phase 2 both populate these ---
     anomaly_score: float = Field(
-        ge=0, le=1, description="0 nominal, 1 strongly anomalous. Autoencoder + IsolationForest ensemble."
+        ge=0,
+        le=1,
+        description="0 nominal, 1 strongly anomalous. Autoencoder + IsolationForest ensemble.",
     )
     is_anomalous: bool
     streams: list[AnomalyStream] = Field(
@@ -70,7 +77,9 @@ class MaintenanceStatus(BaseModel):
         ge=0, description="Run-hours of history behind this model. Drives the phase transition."
     )
     baseline_confidence: float = Field(
-        ge=0, le=1, description="How well-established this vessel's normal is. Low early in Phase 1."
+        ge=0,
+        le=1,
+        description="How well-established this vessel's normal is. Low early in Phase 1.",
     )
 
     # --- Phase 2 only. Must be None in Phase 1; see the validator below. ---

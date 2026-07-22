@@ -15,7 +15,7 @@ Two structural claims from the technical profile are encoded here:
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,7 +28,7 @@ from packages.contracts.speed import SpeedRecommendation
 T = TypeVar("T")
 
 
-class Connectivity(str, Enum):
+class Connectivity(StrEnum):
     ONLINE = "online"
     DEGRADED = "degraded"
     """Reachable but stale -- last cloud response older than its refresh interval."""

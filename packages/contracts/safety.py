@@ -13,12 +13,12 @@ the answer.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     NOMINAL = "nominal"
     WARNING = "warning"
     """Approaching a limit. Advisory. The captain has time to decide."""

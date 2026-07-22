@@ -15,8 +15,8 @@ from packages.contracts import (
 )
 from packages.ingest.validate import (
     FlagCode,
-    VesselValidator,
     Verdict,
+    VesselValidator,
     validate_voyage,
 )
 
@@ -28,7 +28,9 @@ def frame(offset_s: float = 0, **sections) -> TelemetryFrame:
     return TelemetryFrame(vessel_id=VESSEL, ts=T0 + timedelta(seconds=offset_s), **sections)
 
 
-def nominal(offset_s: float, *, coolant: float | None = None, rpm: float = 1800.0) -> TelemetryFrame:
+def nominal(
+    offset_s: float, *, coolant: float | None = None, rpm: float = 1800.0
+) -> TelemetryFrame:
     """A healthy running frame, with the small sensor jitter real telemetry has.
 
     The jitter is not decoration. A perfectly constant channel is exactly what

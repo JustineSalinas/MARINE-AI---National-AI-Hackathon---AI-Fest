@@ -230,7 +230,9 @@ def wave_resistance_kw(
     if sea.wave_height_m <= 0 or speed_kn <= 0:
         return 0.0
 
-    wave_dir = sea.wave_direction_deg if sea.wave_direction_deg is not None else sea.wind_direction_deg
+    wave_dir = (
+        sea.wave_direction_deg if sea.wave_direction_deg is not None else sea.wind_direction_deg
+    )
     angle = math.radians(_relative_angle_deg(heading_deg, wave_dir))
 
     # Head seas are worst; following seas cost about a fifth as much.
