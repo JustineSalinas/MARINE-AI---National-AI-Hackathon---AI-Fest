@@ -2,7 +2,7 @@
 
 Pydantic models here are the single source of truth. TypeScript types for the
 bridge display are generated from their JSON Schema by
-`packages/contracts/export_schema.py` -> `apps/bridge/src/types/contracts.ts`.
+`packages/contracts/export_schema.py` -> `apps/bridge/lib/contracts.ts`.
 
 Never hand-edit the generated TypeScript. Change the model, re-run the export.
 
