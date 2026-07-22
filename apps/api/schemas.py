@@ -1,0 +1,161 @@
+"""Wire models for the advisory API.
+
+Split from `main.py` so the request/response shape is readable on its own and so
+`packages/contracts/export_schema.py` can emit TypeScript for it alongside the
+shared contracts.
+
+Note the division of labour. `packages/contracts` holds models that cross module
+boundaries inside the system -- telemetry, recommendations, bridge state -- and
+is the single source of truth for those. The models here are HTTP-level: what a
+client must send, and the extra diagnostic detail the simulator wants but the
+bridge display does not. `SpeedRecommendation` is imported, never redefined.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from packages.contracts.speed import SpeedRecommendation
+
+PASSENGER_MASS_KG = 70.0
+"""Average mass added per passenger, including baggage.
+
+Philippine adult mean body mass is nearer 60 kg; the balance is what people
+carry onto a short-haul passenger boat. Load matters because displacement enters
+the resistance model directly -- a full boat is a slower, thirstier boat, and
+the profile lists passenger count as an operator input for exactly this reason."""
+
+
+class VesselInput(BaseModel):
+    """Hull and engine, from `VesselProfile` plus the hull-form fields the
+    resistance model needs. One-time operator entry in production."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    vessel_id: str = "MV-DEMO-01"
+
+    length_waterline_m: float = Field(11.5, gt=0)
+    beam_m: float = Field(2.8, gt=0)
+    draft_m: float = Field(1.1, gt=0)
+    displacement_kg: float = Field(8500.0, gt=0)
+
+    rated_kw: float = Field(90.0, gt=0)
+    rated_rpm: float = Field(2800.0, gt=0)
+
+    admiralty_coefficient: float = Field(
+        70.0, gt=0, description="Primary calibration handle; fit per vessel from its own runs."
+    )
+    best_bsfc_g_per_kwh: float = Field(215.0, gt=0)
+    idle_burn_lph: float = Field(1.2, ge=0)
+
+
+class SeaInput(BaseModel):
+    """Conditions at the vessel.
+
+    Sign convention matches `services/speed/resistance.py` and is repeated here
+    because getting it backwards silently inverts every recommendation:
+    wind blows FROM `wind_direction_deg`, current flows TOWARD
+    `current_direction_deg`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    wind_speed_kn: float = Field(0.0, ge=0)
+    wind_direction_deg: float = Field(0.0, ge=0, lt=360)
+    current_speed_kn: float = Field(0.0, ge=0)
+    current_direction_deg: float = Field(0.0, ge=0, lt=360)
+    wave_height_m: float = Field(0.0, ge=0)
+    wave_direction_deg: float | None = Field(None, ge=0, lt=360)
+
+
+class AdviseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vessel: VesselInput = Field(default_factory=VesselInput)
+    sea: SeaInput = Field(default_factory=SeaInput)
+
+    heading_deg: float = Field(0.0, ge=0, lt=360)
+    distance_remaining_nm: float = Field(2.0, gt=0)
+    minutes_available: float | None = Field(
+        None, gt=0, description="ETA constraint. None means optimise fuel per mile alone."
+    )
+
+    current_rpm: float | None = Field(None, ge=0)
+    passenger_count: int = Field(0, ge=0)
+    cargo_kg: float = Field(0.0, ge=0)
+
+    egt_excess_ratio: float | None = Field(
+        None,
+        gt=0,
+        description="Measured exhaust gas temperature over this vessel's own healthy "
+        "baseline at the same load. 1.0 is as-new. None means engine condition unknown.",
+    )
+    php_per_litre: float | None = Field(70.0, gt=0)
+
+    @property
+    def added_load_kg(self) -> float:
+        return self.passenger_count * PASSENGER_MASS_KG + self.cargo_kg
+
+
+class PowerOut(BaseModel):
+    """Itemised shaft power. Shown so a recommendation can explain itself --
+    "you are punching a 1.4 m head sea" rather than an unexplained number."""
+
+    total_kw: float
+    calm_water_kw: float
+    wind_kw: float
+    wave_kw: float
+    speed_through_water_kn: float
+    environmental_penalty_pct: float
+
+
+class WearOut(BaseModel):
+    """Engine condition, priced. The Problem 1 -> Problem 2 link, per hour."""
+
+    multiplier: float = Field(description="1.0 as-new; 1.08 means 8% more fuel for the same work.")
+    penalty_lph: float
+    penalty_php_per_hour: float | None = None
+
+
+class EmissionsOut(BaseModel):
+    co2_kg_per_hour: float
+    co2_kg_per_nm: float | None = None
+
+
+class CurvePoint(BaseModel):
+    """One sample of the speed/burn curve.
+
+    The whole curve is returned so the browser can interpolate between API calls
+    at 60fps without reimplementing the physics. There is one fuel model in this
+    system and it is in Python; the display consumes it and never recomputes it.
+    """
+
+    speed_kn: float
+    rpm: float
+    shaft_kw: float
+    litres_per_hour: float
+
+
+class AdviseResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recommendation: SpeedRecommendation
+    power: PowerOut
+    wear: WearOut
+    emissions: EmissionsOut
+    curve: list[CurvePoint]
+
+    achievable_speed_kn: float | None = Field(
+        None,
+        description="Speed the vessel actually makes at current_rpm in these conditions. "
+        "Not a function of throttle alone -- weather slows the boat.",
+    )
+    max_speed_kn: float = Field(description="Fastest this engine can drive this hull right now.")
+
+    feasible: bool = Field(description="False when the schedule cannot be met at any throttle.")
+    notes: list[str] = Field(default_factory=list)
+
+    model_trained: bool = Field(
+        description="False when no wear artifact is loaded; engine is then assumed healthy "
+        "and confidence is reduced accordingly."
+    )

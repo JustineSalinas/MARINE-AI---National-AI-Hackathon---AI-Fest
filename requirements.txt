@@ -1,0 +1,21 @@
+# Serving dependencies for the Vercel Python function (api/index.py).
+#
+# Deliberately NOT the project's full dependency set. `pyproject.toml` is what a
+# developer installs; this is the minimum the advisory API needs to answer a
+# request, and the gap between them is the point:
+#
+#   xgboost + scikit-learn + scipy + pandas   358 MB   (training)
+#   onnxruntime + numpy                        64 MB   (serving)
+#
+# Vercel's Python runtime allows 500 MB. The training stack fits only barely,
+# and Linux wheels run larger than the Windows measurement above -- xgboost
+# bundles libxgboost.so. Serving from ONNX removes that risk entirely rather
+# than betting the submission deadline on a wheel size.
+#
+# Nothing here may drift from pyproject.toml in a way that changes an answer:
+# the model is a fixed ONNX artifact, and the physics is pure Python.
+
+fastapi>=0.115
+pydantic>=2.9
+numpy>=1.26
+onnxruntime>=1.19
