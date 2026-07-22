@@ -3,8 +3,8 @@
 The route is scored by the *same* fuel model that drives Speed Optimization.
 That shared cost basis is the strongest architectural claim in the technical
 profile, so `predicted_burn_l` on this model and `predicted_burn_lph` on
-`SpeedRecommendation` must be traceable to one `services/speed/model.py`
-artifact. An integration test asserts they agree.
+`SpeedRecommendation` must both come from `services/speed/fuel.py`, costed
+through `services/speed/optimizer.py`. An integration test asserts they agree.
 """
 
 from __future__ import annotations

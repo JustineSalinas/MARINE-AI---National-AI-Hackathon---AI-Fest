@@ -16,8 +16,9 @@ collected from any vessel.
 | `uci-cbm` | UCI *Condition Based Maintenance of Naval Propulsion Plants* (Coraddu et al., 2014) | CC BY 4.0 | Engine fuel map for Speed Optimization |
 | `nasa-cmapss` | NASA C-MAPSS turbofan degradation (Saxena et al., 2008) | Public domain (US Gov) | Pretraining the Phase 1 anomaly detector |
 | `natural-earth-coastline` | Natural Earth 10m physical coastline | Public domain | Chart geometry on the bridge display |
+| `sentinel2-cloudless` | Sentinel-2 cloudless 2020 (EOX) | CC BY 4.0 | Satellite basemap, and the land mask the helm view ray-casts for its horizon |
 | Open-Meteo Marine API | open-meteo.com | CC BY 4.0, free tier | Live and historical wind, wave, current |
-| GEBCO | GEBCO global bathymetry grid | Public, attribution required | Depth safety constraint |
+| ~~GEBCO~~ | GEBCO global bathymetry grid | Public, attribution required | Depth safety constraint — **not yet integrated**, and deliberately absent from `data/registry.py` so `data/download.py` cannot fetch a source we do not use. Route Optimization is the module that needs it. |
 
 **PAGASA** is named in the technical profile but has **no public programmatic
 API**. It is a stated future integration, not a working data source in this

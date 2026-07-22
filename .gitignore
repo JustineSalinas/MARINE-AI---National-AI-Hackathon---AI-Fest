@@ -7,12 +7,18 @@
 *.zip
 
 # Model artifacts — regenerate with `python -m services.<module>.train`
-/models/**/*.json
 /models/**/*.pt
-/models/**/*.onnx
 /models/**/*.pkl
 /models/**/*.joblib
 !/models/**/MODEL_CARD.md
+
+# ...except the ONNX serving artifacts and their model cards, which ARE
+# committed. They are small (the fuel map is 363 kB), and the deployed API
+# loads them directly: leaving them out means every deployment silently serves
+# an untrained model with engine wear assumed healthy. Training inputs stay
+# uncommitted; the trained output that production depends on does not.
+!/models/**/*.onnx
+!/models/**/*.card.json
 
 # Python
 __pycache__/
@@ -39,3 +45,6 @@ out/
 Thumbs.db
 .vscode/
 .idea/
+
+# Playwright MCP screenshot artifacts
+.playwright-mcp/

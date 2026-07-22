@@ -24,9 +24,10 @@ is named in every case, and every check is reproducible.
 | 5 | TensorFlow Lite for edge inference | ONNX Runtime | Stack |
 | 6 | TimescaleDB for time-series storage | Supabase Postgres | Stack |
 | 7 | PAGASA and OpenWeather marine forecasts | Open-Meteo Marine | Stack |
-| 8 | Sonar hardware for depth | GEBCO bathymetry grid | Sensing |
+| 8 | Sonar hardware for depth | Charted bathymetry intended; **not yet integrated** | Sensing |
 | 9 | AIS receiver for traffic avoidance | Omitted | Sensing |
-| 10 | Docker for edge deployment | Container at deploy; not used locally | Minor |
+| 10 | (not in profile) | Sentinel-2 satellite basemap; Google/Bing/Esri rejected on licence | Data |
+| 11 | Docker for edge deployment | Container at deploy; not used locally | Minor |
 
 ---
 
@@ -115,11 +116,26 @@ not a kilowatt. It is the *model input* that changed, not the interface.
 
 **Profile (§3.1 Tools):** TensorFlow Lite for edge inference.
 
-**Build:** ONNX Runtime. The models that need edge inference are XGBoost and
-scikit-learn estimators. TFLite targets TensorFlow graphs; exporting
-gradient-boosted trees through it means a conversion no one should be debugging
-during a sprint. ONNX is the native export path for both (`skl2onnx`), and runs
-on the same class of edge hardware. Same architectural role, working toolchain.
+**Build:** ONNX Runtime, and it is **in use, not planned**. The trained model
+is exported by `services/speed/train.py` to `models/fuel_degradation.onnx`, and
+that file is what the API loads — `services/speed/fuel.py` imports no xgboost.
+
+TFLite targets TensorFlow graphs; exporting gradient-boosted trees through it
+means a conversion no one should be debugging during a sprint. ONNX is the
+native export path for both XGBoost and scikit-learn estimators, and runs on
+the same class of edge hardware.
+
+The decision earned its keep sooner than expected. Serving through xgboost
+requires xgboost, scikit-learn, scipy and pandas — **358 MB of runtime for a
+363 kB tree ensemble**. ONNX Runtime plus numpy is **99 MB**, which is what
+lets the advisory API run as a serverless function inside a 500 MB limit
+instead of needing a dedicated host. The same argument applies unchanged to a
+control unit aboard a vessel.
+
+The export is gated: the trainer refuses to write an ONNX file whose
+predictions differ from the trained model by more than `1e-4`, so the deployed
+model is provably the one the metrics describe. Observed drift is `1.5e-6`,
+which is float32 rounding.
 
 ## 6. Supabase Postgres instead of TimescaleDB
 
@@ -150,18 +166,24 @@ needed: wave height, wave direction and ocean current are in its free tier and
 behind OpenWeather's paid tier. It is CC BY 4.0 and needs no API key, so a judge
 can clone and run without registering anywhere.
 
-## 8. GEBCO bathymetry instead of sonar
+## 8. Charted bathymetry instead of sonar — and not yet built
 
 **Profile (§2.1, §3.1):** sonar hardware supplies the depth safety constraint.
 
-**Build:** the GEBCO global bathymetry grid.
+**Build:** charted depth from GEBCO is the intended substitute, forced by the
+no-hardware declaration — there is no sonar transducer because there is no
+vessel. Charted depth is not live: it misses uncharted obstructions and silting,
+which is exactly why the profile specifies sonar for production. The constraint
+would be real; the sensing is not.
 
-Forced by the no-hardware declaration — there is no sonar transducer because
-there is no vessel. GEBCO gives real charted depth along real Philippine routes,
-so the depth constraint is genuinely enforced against genuine geography rather
-than mocked. The difference is that charted depth is not live: it misses
-uncharted obstructions and silting, which is exactly why the profile specifies
-sonar for production. The constraint is real; the sensing is not.
+**Status as of 2026-07-22: not integrated.** The depth constraint belongs to
+Route Optimization, which is not built yet. GEBCO is therefore deliberately
+*absent* from `data/registry.py`, so `data/download.py` refuses to fetch it and
+no part of the repository can imply a bathymetry source is in use when it is
+not. The chart the display draws is Natural Earth coastline only, extracted by
+`data/build_chart.py`, and it carries its own scale caveat in the output file.
+
+Recording an unbuilt thing as unbuilt is cheaper than being asked about it.
 
 ## 9. AIS is omitted
 
@@ -176,7 +198,31 @@ constraint a demo of our own random number generator.
 the field is reserved and the omission is visible in the data model rather than
 hidden. It was a recommended addition, not baseline.
 
-## 10. Docker
+## 10. Satellite imagery: Sentinel-2, not Google
+
+Not a deviation from the profile — the profile says nothing about basemaps — but
+recorded here because it is the kind of decision a judge should be able to check.
+
+The display shows **real satellite imagery of the Iloilo Strait**: Sentinel-2
+cloudless 2020 by EOX, CC BY 4.0, containing modified Copernicus Sentinel data.
+10 m ground resolution, no API key, attributed on screen as the licence requires.
+
+**Google, Bing and Esri satellite tiles were considered and rejected.** Their
+terms permit use only through their own APIs and forbid redistributing or
+re-hosting imagery in another application; a screenshot of a web map is neither
+licensed nor attributable. The brief grades "use only licensed or public
+datasets", so a Google Maps capture is a scoring risk before it is anything
+else. An earlier prototype used exactly that and it was removed.
+
+The same imagery does double duty: `data/build_chart.py` classifies it into a
+land/water mask, and the helm view ray-casts that mask to build its horizon. So
+the shoreline under the vessel and the silhouette on the skyline come from one
+source and cannot contradict each other.
+
+Its limits are recorded in `data/registry.py`: it is imagery, not a chart. No
+depth, no aids to navigation, and an annual composite showing no particular day.
+
+## 11. Docker
 
 **Profile (§3.1 Tools):** Docker for edge deployment.
 

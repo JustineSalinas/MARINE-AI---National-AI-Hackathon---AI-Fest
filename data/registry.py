@@ -56,10 +56,14 @@ REGISTRY: dict[str, Dataset] = {
             "This is a GAS TURBINE frigate propulsion plant, not a diesel engine. It is used "
             "as a documented proxy because it is the only public dataset pairing shaft "
             "torque, RPM, ship speed and ground-truth fuel flow at this resolution.",
-            "The transfer assumption is that the SHAPE of the load-to-burn relationship "
-            "(burn rises super-linearly with shaft power, and the efficient band sits below "
-            "maximum rated RPM) holds across both prime movers. The absolute litres-per-hour "
-            "values do not transfer and are rescaled to the target vessel's rated power.",
+            "TRANSFER IS NARROWER THAN IT LOOKS. Only the DIMENSIONLESS WEAR PENALTY is "
+            "taken from this dataset -- at the same shaft load, how much more fuel does a worn "
+            "engine burn than a healthy one. The part-load curve is NOT transferred: measured "
+            "2026-07-22, this turbine burns ~7x its best-point SFC at 10% load where a marine "
+            "diesel burns ~1.5x, so borrowing its shape would overstate the savings from "
+            "slowing down by roughly five times, in the product's own favour. Healthy burn "
+            "comes from a published diesel BSFC curve in services/speed/fuel.py instead. "
+            "See docs/DEVIATIONS.md section 2.",
             "STRUCTURE VERIFIED 2026-07-22: 11,934 rows are a complete factorial grid of "
             "9 lever positions x 51 compressor-decay states x 26 turbine-decay states. "
             "There are only 9 distinct ship speeds, and speed is fully determined by lever "
@@ -115,6 +119,36 @@ REGISTRY: dict[str, Dataset] = {
     # What the IMU is genuinely good for at 1 Hz -- sustained vibration energy
     # trending upward, shock events, changes in mounting rigidity -- is learned
     # from the vessel's own baseline instead. See docs/DEVIATIONS.md.
+    "sentinel2-cloudless": Dataset(
+        key="sentinel2-cloudless",
+        name="Sentinel-2 cloudless (EOX) — Iloilo Strait basemap",
+        url=(
+            "https://tiles.maps.eox.at/wms?service=WMS&version=1.1.1&request=GetMap"
+            "&layers=s2cloudless-2020&bbox=122.46,10.58,122.72,10.78"
+            "&width=1400&height=1077&srs=EPSG:4326&format=image/jpeg"
+        ),
+        licence="CC BY 4.0 (EOX IT Services GmbH; modified Copernicus Sentinel data 2020)",
+        citation=(
+            "Sentinel-2 cloudless (2020) by EOX IT Services GmbH, https://s2maps.eu. "
+            "Contains modified Copernicus Sentinel data 2020. Licensed CC BY 4.0."
+        ),
+        purpose=(
+            "Real satellite basemap for the bridge display, and the source of the "
+            "land/water mask the helm view ray-casts to build its horizon."
+        ),
+        caveats=[
+            "10 m ground resolution, cloud-free annual composite. It is imagery, not a "
+            "navigational chart: it carries no depth, no aids to navigation, and no "
+            "survey date. The depth constraint must come from bathymetry.",
+            "A composite, so it shows no particular day. Vessels, wakes and tide state "
+            "visible in any single scene are averaged out, which is the correct choice "
+            "for a basemap and the wrong one for anything time-sensitive.",
+            "ATTRIBUTION IS REQUIRED under CC BY 4.0 and is rendered on the display. "
+            "Google/Bing/Esri satellite tiles were considered and REJECTED: their terms "
+            "forbid reuse outside their own APIs, and the submission is graded on using "
+            "only licensed or public data.",
+        ],
+    ),
     "natural-earth-coastline": Dataset(
         key="natural-earth-coastline",
         name="Natural Earth 10m Physical Coastline",

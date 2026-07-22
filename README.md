@@ -15,6 +15,7 @@ No new vessel. No engine replacement. It installs onto boats already in service.
 - **Data sources and licences:** [`docs/DATA.md`](docs/DATA.md)
 - **Ethics and bias mitigation:** [`docs/ETHICS.md`](docs/ETHICS.md)
 - **Deviations from the technical profile:** [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md)
+- **Deploying the public demo:** [`docs/DEPLOY.md`](docs/DEPLOY.md)
 
 ---
 
@@ -43,7 +44,7 @@ source URL, and retrieval date. Summary:
 | Weather / wave / current forecasting | Trained by us (Temporal Fusion Transformer) on Open-Meteo Marine historical reanalysis. |
 | Anomaly detection | Trained by us (autoencoder + Isolation Forest), pretrained on the NASA C-MAPSS run-to-failure dataset. FEMTO/PRONOSTIA is named in the technical profile but **is not used** — it is 25.6 kHz bench-rig vibration and the specified retrofit IMU logs at ~1 Hz. See [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md). |
 | Natural-language advisory | Anthropic Claude API (`claude-sonnet-5`), used for phrasing only. It never produces a number, a threshold, or a recommendation. |
-| Chart geometry | Natural Earth coastline (public domain), GEBCO bathymetry. |
+| Chart geometry | Natural Earth 10m coastline (public domain), extracted to the demo route by `data/build_chart.py`. GEBCO bathymetry is the intended source for the depth constraint and **is not yet integrated** — see [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md). |
 
 No pretrained model weights from third parties are shipped in this repository.
 
@@ -79,63 +80,87 @@ python -m data.download --all       # or --dataset uci-cbm
 
 Each download asserts its licence and records a card in `docs/DATA.md`.
 
-### 3. Train the models
+### 3. Train the model, build the chart
 
 ```bash
-python -m services.speed.train          # ~30s   XGBoost fuel model
-python -m services.route.train          # ~15min TFT forecaster
-python -m services.maintenance.train    # ~5min  autoencoder + IsolationForest
+python -m services.speed.train      # ~5s, XGBoost engine-wear model
+python -m data.build_chart          # Natural Earth -> apps/bridge/public/chart.json
 ```
 
-Artifacts land in `models/`, each beside a `MODEL_CARD.md` with held-out metrics.
-Metrics are computed on **voyage-wise** splits, not row-wise — row-wise splitting
-leaks on time series and inflates the numbers.
+The trainer prints its held-out scores and writes
+`models/fuel_degradation.card.json` with the full model card. Validation holds
+out **whole engine-wear states**, not rows: the source dataset is a factorial
+grid, so a row-wise split puts near-identical neighbours on both sides and
+reports a meaningless number.
+
+**Both steps are optional.** The API serves without the artifact — engine
+condition is then assumed healthy, confidence is reduced, and every response
+says so via `model_trained: false`. The display falls back to a schematic
+outline without the chart file.
+
+*Not yet built: the Route Optimization forecaster and the Predictive Maintenance
+anomaly detector. See [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md).*
 
 ### 4. Run
 
+Two processes. First the advisory API:
+
 ```bash
-cp .env.example .env                # add ANTHROPIC_API_KEY (optional)
-uvicorn apps.api.main:app --reload  # http://localhost:8000
-python -m packages.sim.run          # feeds a synthetic voyage into the API
+uvicorn apps.api.main:app --reload      # http://localhost:8000
 ```
 
-In a second terminal:
+Then, in a second terminal, the bridge display:
 
 ```bash
 cd apps/bridge
-bun install
-bun dev                             # http://localhost:3000
+npm install
+npm run dev                             # http://localhost:3100
 ```
 
-The advisory layer runs without `ANTHROPIC_API_KEY`. It falls back to
-deterministic templates, and the display marks the source. Nothing in the demo
-path blocks on a network call.
+If port 3000 is free you can use it; the API accepts both. To use another port,
+set `MARINE_AI_CORS_ORIGINS` for the API and `NEXT_PUBLIC_API_URL` for the
+display.
+
+Open the display, press **Start voyage**, and switch between the four views —
+*North-up*, *Course-up*, *Follow*, and *Helm*. Nothing in the browser computes
+physics: every speed, burn and recommendation comes from `POST /advise`. Kill
+the API mid-voyage and the display ages its last known values visibly rather
+than blanking, which is the designed behaviour for routes that lose signal.
+
+The advisory sentence is currently the deterministic template
+(`advisory_source: "template"`). The Claude phrasing layer is a later swap; the
+display never blocks on it.
 
 ### 5. Test
 
 ```bash
-pytest                              # contracts, ingest validation, safety rules
-cd apps/bridge && bun run typecheck
+pytest                                  # 142 tests
+ruff check apps services packages tests data
+cd apps/bridge && npx tsc --noEmit && npx eslint .
 ```
 
 ---
 
 ## Repository layout
 
+`[built]` runs today. `[planned]` is a directory with a stated purpose and no
+implementation yet — listed so the gap is visible rather than discovered.
+
 ```
-apps/bridge/        Next.js bridge display — the captain's screen
-apps/api/           FastAPI: ingest, three module routers, SSE stream
-services/speed/     XGBoost fuel model + throttle optimizer
-services/route/     TFT forecaster + MPC waypoint solver
-services/maintenance/  Autoencoder + Isolation Forest (Phase 1); RSF scaffold (Phase 2)
-services/safety/    Rule-based cutoffs. Deterministic, no ML, no network.
-packages/contracts/ Pydantic models -> generated TypeScript. Single source of truth.
-packages/sim/       Vessel and sensor simulator, with fault injection
-packages/ingest/    Range checks, timestamp validation, drift monitoring
-data/               Download scripts. No data committed.
-models/             Trained artifacts + model cards
-infra/              Dockerfile, compose (TimescaleDB + Mosquitto), fly.toml
-docs/               Architecture, data, ethics, deviations
+apps/bridge/          [built]   Next.js simulator console + bridge display, 4 POV modes
+apps/api/             [built]   FastAPI advisory service: POST /advise
+services/speed/       [built]   Hull resistance (physics) + fuel map (XGBoost) + optimizer
+services/emissions/   [built]   CO2 accounting from the same burn figure (Problem 3)
+services/safety/      [planned] Rule-based cutoffs. Deterministic, no ML, no network.
+services/route/       [planned] Forecaster + waypoint solver
+services/maintenance/ [planned] Autoencoder + Isolation Forest (Phase 1); RSF (Phase 2)
+packages/contracts/   [built]   Pydantic models -> generated TypeScript. Source of truth.
+packages/ingest/      [built]   Range checks, timestamp validation, drift monitoring
+packages/sim/         [planned] Vessel and sensor simulator with fault injection
+data/                 [built]   Dataset registry, download and chart-build scripts
+models/               [built]   Trained artifacts + model cards (gitignored)
+infra/                [planned] Container and deploy configuration
+docs/                 [built]   Data strategy, deviations from the technical profile
 ```
 
 ## The AI-authority boundary
