@@ -77,7 +77,10 @@ REGISTRY: dict[str, Dataset] = {
     "nasa-cmapss": Dataset(
         key="nasa-cmapss",
         name="NASA C-MAPSS Turbofan Engine Degradation Simulation",
-        url="https://data.nasa.gov/download/ff5v-kuh6/application%2Fzip",
+        url=(
+            "https://phm-datasets.s3.amazonaws.com/NASA/"
+            "6.+Turbofan+Engine+Degradation+Simulation+Data+Set.zip"
+        ),
         licence="U.S. Government work, public domain (NASA Open Data)",
         citation=(
             "Saxena, A., Goebel, K., Simon, D., & Eklund, N. (2008). Damage propagation "
@@ -95,25 +98,23 @@ REGISTRY: dict[str, Dataset] = {
             "possible at all; it is explicitly not a source of RUL predictions here.",
         ],
     ),
-    "femto-bearing": Dataset(
-        key="femto-bearing",
-        name="FEMTO-ST / PRONOSTIA Bearing Run-to-Failure",
-        url="https://data.nasa.gov/download/brfb-gzcv/application%2Fzip",
-        licence="U.S. Government work, public domain (NASA PCoE repository)",
-        citation=(
-            "Nectoux, P., et al. (2012). PRONOSTIA: An experimental platform for bearings "
-            "accelerated degradation tests. IEEE PHM 2012."
-        ),
-        purpose=(
-            "Pretrains the vibration branch of the anomaly detector — the 6-axis IMU "
-            "channels that detect bearing wear and shaft misalignment."
-        ),
-        archive=True,
-        caveats=[
-            "Bench test rig, not a vessel. Contributes vibration degradation signatures "
-            "only.",
-        ],
-    ),
+    # FEMTO / PRONOSTIA is named in the technical profile but is NOT used here.
+    # Two reasons, recorded so the omission is a decision rather than an oversight:
+    #
+    #   1. Its NASA PCoE download key could not be resolved on 2026-07-22. The
+    #      data.nasa.gov entry 404s and the phm-datasets S3 bucket denies listing.
+    #      We do not cite a source we could not download.
+    #
+    #   2. More fundamentally, it would not have helped. FEMTO is bench-rig bearing
+    #      vibration sampled at 25.6 kHz. Bearing defect signatures live in the
+    #      kilohertz band. The retrofit IMU logs at ~1 Hz alongside the other
+    #      electro-mechanical channels, which is three to four orders of magnitude
+    #      too slow to resolve them. Pretraining on FEMTO and applying it to a 1 Hz
+    #      IMU stream would imply a diagnostic capability the sensor cannot deliver.
+    #
+    # What the IMU is genuinely good for at 1 Hz -- sustained vibration energy
+    # trending upward, shock events, changes in mounting rigidity -- is learned
+    # from the vessel's own baseline instead. See docs/DEVIATIONS.md.
     "natural-earth-coastline": Dataset(
         key="natural-earth-coastline",
         name="Natural Earth 10m Physical Coastline",

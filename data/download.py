@@ -30,6 +30,33 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _extract(archive_path: Path, target: Path, *, depth: int = 0, max_depth: int = 3) -> int:
+    """Extract a zip, then any zips it contained.
+
+    NASA PCoE ships C-MAPSS as a zip containing CMAPSSData.zip. Handling nesting
+    generically means the next re-packaged source does not silently produce an
+    empty dataset directory that only surfaces as a confusing error at train time.
+    """
+    with zipfile.ZipFile(archive_path) as archive:
+        names = archive.namelist()
+        archive.extractall(target)
+    count = len(names)
+
+    if depth >= max_depth:
+        return count
+
+    for name in names:
+        nested = target / name
+        # Skip the archive we just read, and macOS resource-fork noise.
+        if not nested.is_file() or nested.suffix.lower() != ".zip":
+            continue
+        if nested.resolve() == archive_path.resolve() or "__MACOSX" in nested.parts:
+            continue
+        count += _extract(nested, nested.parent, depth=depth + 1, max_depth=max_depth)
+
+    return count
+
+
 def fetch(dataset: Dataset, *, force: bool = False) -> Path:
     target = RAW / dataset.key
     marker = target / ".fetched"
@@ -55,9 +82,7 @@ def fetch(dataset: Dataset, *, force: bool = False) -> Path:
 
     if dataset.archive:
         try:
-            with zipfile.ZipFile(archive_path) as archive:
-                archive.extractall(target)
-            print(f"  {dataset.key}: extracted {len(zipfile.ZipFile(archive_path).namelist())} entries")
+            extracted = _extract(archive_path, target)
         except zipfile.BadZipFile:
             print(
                 f"  {dataset.key}: NOT a zip archive. The source may have moved or now "
@@ -65,6 +90,7 @@ def fetch(dataset: Dataset, *, force: bool = False) -> Path:
                 file=sys.stderr,
             )
             raise
+        print(f"  {dataset.key}: extracted {extracted} entries")
 
     marker.write_text(f"{dataset.url}\nsha256={checksum}\n", encoding="utf-8")
     return target
