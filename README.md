@@ -41,7 +41,7 @@ source URL, and retrieval date. Summary:
 |---|---|
 | Fuel-consumption model | Trained by us (XGBoost) on the UCI *Condition Based Maintenance of Naval Propulsion Plants* dataset. **Gas turbine data used as a documented proxy for diesel** — see `docs/DATA.md`. |
 | Weather / wave / current forecasting | Trained by us (Temporal Fusion Transformer) on Open-Meteo Marine historical reanalysis. |
-| Anomaly detection | Trained by us (autoencoder + Isolation Forest), pretrained on NASA C-MAPSS and FEMTO/PRONOSTIA run-to-failure datasets. |
+| Anomaly detection | Trained by us (autoencoder + Isolation Forest), pretrained on the NASA C-MAPSS run-to-failure dataset. FEMTO/PRONOSTIA is named in the technical profile but **is not used** — it is 25.6 kHz bench-rig vibration and the specified retrofit IMU logs at ~1 Hz. See [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md). |
 | Natural-language advisory | Anthropic Claude API (`claude-sonnet-5`), used for phrasing only. It never produces a number, a threshold, or a recommendation. |
 | Chart geometry | Natural Earth coastline (public domain), GEBCO bathymetry. |
 
