@@ -104,6 +104,32 @@ def test_burn_is_dimensionally_correct():
     assert 15.0 < est.litres_per_hour < 25.0
 
 
+def test_idle_governor_sets_a_floor_under_burn():
+    """A running diesel burns fuel at no load. Without this the model says a
+    vessel crawling at one knot consumes almost nothing, and any optimiser
+    reading that curve concludes the cheapest crossing is to barely move."""
+    fm = FuelMap(BANGKA)
+    assert fm.estimate(0.05).litres_per_hour == pytest.approx(BANGKA.idle_burn_lph)
+    assert fm.estimate(0.0).litres_per_hour == pytest.approx(BANGKA.idle_burn_lph)
+    # The floor must not distort the normal operating band.
+    assert fm.estimate(72.0).litres_per_hour > BANGKA.idle_burn_lph * 5
+
+
+def test_reported_bsfc_always_matches_reported_burn():
+    """The two are derived from one number, so they cannot drift apart -- including
+    where the idle floor binds and specific consumption goes very high."""
+    fm = FuelMap(BANGKA)
+    for kw in (0.5, 5.0, 45.0, 90.0):
+        est = fm.estimate(kw)
+        implied = est.bsfc_g_per_kwh * kw / 1000.0 / FUEL_DENSITY_KG_PER_L
+        assert implied == pytest.approx(est.litres_per_hour)
+
+
+def test_negative_idle_burn_rejected():
+    with pytest.raises(ValueError):
+        EngineSpec(rated_kw=90.0, rated_rpm=2800.0, idle_burn_lph=-1.0)
+
+
 def test_burn_rises_monotonically_with_shaft_power():
     fm = FuelMap(BANGKA)
     burns = [fm.estimate(kw).litres_per_hour for kw in range(10, 91, 10)]

@@ -1,0 +1,77 @@
+{
+  "model": "fuel degradation multiplier",
+  "target": "sfc_ratio",
+  "target_meaning": "specific fuel consumption as a multiple of the same engine's healthy SFC at the same shaft load",
+  "features": [
+    "load_fraction",
+    "egt_excess_ratio"
+  ],
+  "training_data": {
+    "source": "UCI CBM (Coraddu et al., 2014), CC BY 4.0",
+    "prime_mover": "27 MW marine gas turbine \u2014 a documented proxy for a small marine diesel; see docs/DATA.md",
+    "rows_used": 9282,
+    "rows_dropped": 2652,
+    "excluded_lever_speeds_kn": [
+      3.0,
+      6.0
+    ],
+    "distinct_load_points": 9207,
+    "distinct_wear_states": 1326,
+    "load_fraction_range": [
+      0.04480225664442327,
+      1.0
+    ],
+    "observed_wear_penalty_pct": 14.55294552419164
+  },
+  "validation": {
+    "split": "GroupShuffleSplit over whole (compressor, turbine) decay states",
+    "rationale": "row-wise splits leak across a factorial grid",
+    "held_out_wear_states": 332,
+    "held_out_rows": 2324,
+    "scores": {
+      "assume-healthy": {
+        "name": "assume-healthy",
+        "mae_pct_of_fuel": 5.015088291483407,
+        "max_error_pct_of_fuel": 14.112318211149555,
+        "r2": -4.012179355516381
+      },
+      "linear": {
+        "name": "linear",
+        "mae_pct_of_fuel": 0.6426397604636613,
+        "max_error_pct_of_fuel": 3.1378287865417187,
+        "r2": 0.8912446895520915
+      },
+      "xgboost": {
+        "name": "xgboost",
+        "mae_pct_of_fuel": 0.08538393098339145,
+        "max_error_pct_of_fuel": 0.6134660750996002,
+        "r2": 0.998024010787646
+      }
+    },
+    "selected": "xgboost"
+  },
+  "known_limits": [
+    "Load is sampled at only 9207 distinct points. The wear axis is densely sampled and trustworthy; the load axis is interpolated between coarse steps.",
+    "Trained on a gas turbine. Only the dimensionless wear penalty is transferred; absolute fuel level comes from a diesel BSFC curve.",
+    "Wind, current, wave height and passenger load do not vary in this dataset and are handled by services/speed/resistance.py instead."
+  ],
+  "xgb_params": {
+    "n_estimators": 400,
+    "max_depth": 4,
+    "learning_rate": 0.05,
+    "subsample": 0.9,
+    "colsample_bytree": 1.0,
+    "reg_lambda": 1.0,
+    "random_state": 20260804,
+    "n_jobs": 4
+  },
+  "fit_seconds": 0.44,
+  "random_seed": 20260804,
+  "serving": {
+    "format": "onnx",
+    "artifact": "models\\fuel_degradation.onnx",
+    "runtime": "onnxruntime",
+    "parity_max_abs_diff": 1.5497207641601562e-06,
+    "rationale": "Serving through xgboost/scikit-learn requires 358 MB of runtime for a 363 kB model. ONNX Runtime needs 40 MB and no data-science stack, which is what lets the advisory API run as a serverless function and what the profile's edge-inference claim actually rests on."
+  }
+}

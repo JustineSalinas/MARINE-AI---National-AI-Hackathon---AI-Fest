@@ -30,9 +30,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import joblib
+REPO_ROOT = Path(__file__).resolve().parents[2]
+"""Anchored to this file, not to the working directory.
 
-ARTIFACT_PATH = Path("models/fuel_degradation.joblib")
+A relative path works when the API is started from the repository root and fails
+silently everywhere else -- in a serverless function, in a container with a
+different WORKDIR, in a test run from a subdirectory. The failure mode is the
+bad one: `FuelMap.load` finds nothing, assumes the engine is healthy, and serves
+plausible numbers with no error anywhere."""
+
+ARTIFACT_PATH = REPO_ROOT / "models" / "fuel_degradation.onnx"
+"""The wear model, as ONNX.
+
+Serving through xgboost means installing xgboost, scikit-learn, scipy and pandas
+-- 358 MB of runtime to evaluate a 363 kB tree ensemble. ONNX Runtime is 40 MB
+and pulls in none of them. That is the difference between this API fitting in a
+serverless function and needing a dedicated host, and it is what the technical
+profile's edge-inference claim actually depends on.
+
+`services/speed/train.py` writes this file and refuses to ship one whose
+predictions drift from the trained model by more than 1e-4."""
 
 FUEL_DENSITY_KG_PER_L = 0.845
 """Marine gas oil / automotive diesel at 15 C. Philippine pump diesel sits in
@@ -101,11 +118,26 @@ class EngineSpec:
     the Admiralty coefficient in resistance.py this is a starting point to be
     replaced by a per-vessel fit against the boat's own fuel-flow meter."""
 
+    idle_burn_lph: float = 1.2
+    """Fuel burned at idle, independent of load. Roughly 1-2 L/h for this engine
+    class.
+
+    Without this floor the model burns proportionally to shaft power all the way
+    down, so a vessel crawling at one knot appears to consume almost nothing --
+    and any optimiser handed that curve concludes that the cheapest way to cross
+    a strait is to barely move. A running diesel does not work that way: below
+    roughly 5% load the idle governor sets fuel flow, not the propeller.
+
+    Scaling: about 1.3% of rated power expressed as fuel. Adjust per engine from
+    a few minutes of fuel-flow logging at neutral."""
+
     def __post_init__(self) -> None:
         if self.rated_kw <= 0 or self.rated_rpm <= 0:
             raise ValueError("rated_kw and rated_rpm must be positive")
         if self.best_bsfc_g_per_kwh <= 0:
             raise ValueError("best_bsfc_g_per_kwh must be positive")
+        if self.idle_burn_lph < 0:
+            raise ValueError("idle_burn_lph cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -135,6 +167,28 @@ class BurnEstimate:
     caveats: tuple[str, ...] = ()
 
 
+class OnnxWearModel:
+    """ONNX Runtime behind the same `.predict(rows)` shape the trainer produces.
+
+    Deliberately duck-typed rather than an abstract base class. `FuelMap` should
+    not know or care whether it is holding a scikit-learn estimator, an XGBoost
+    booster or an ONNX session -- which is also what lets the tests substitute a
+    stub without importing a runtime.
+    """
+
+    def __init__(self, path: Path | str):
+        import onnxruntime as ort  # imported here so training does not pay for it
+
+        self._session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+        self._input = self._session.get_inputs()[0].name
+
+    def predict(self, rows):
+        import numpy as np
+
+        batch = np.asarray(rows, dtype=np.float32)
+        return np.asarray(self._session.run(None, {self._input: batch})[0]).ravel()
+
+
 class FuelMap:
     """Turns required shaft power into litres per hour for one specific vessel.
 
@@ -159,9 +213,7 @@ class FuelMap:
         path = Path(path)
         if not path.exists():
             return cls(spec)
-        bundle = joblib.load(path)
-        lo, hi = bundle.get("load_fraction_range", (0.0, 1.0))
-        return cls(spec, wear_model=bundle["model"], load_range=(lo, hi))
+        return cls(spec, wear_model=OnnxWearModel(path), load_range=(0.045, 1.0))
 
     @property
     def has_wear_model(self) -> bool:
@@ -245,12 +297,23 @@ class FuelMap:
         healthy_bsfc = self.spec.best_bsfc_g_per_kwh * diesel_bsfc_ratio(load_fraction)
         bsfc = healthy_bsfc * wear
 
-        lph = shaft_kw * bsfc / 1000.0 / FUEL_DENSITY_KG_PER_L
-        healthy_lph = shaft_kw * healthy_bsfc / 1000.0 / FUEL_DENSITY_KG_PER_L
+        # The idle governor sets a floor: a running engine burns fuel even when
+        # the propeller is asking for almost none. Applied to both the actual and
+        # the healthy figure so the wear penalty stays a like-for-like difference.
+        idle = self.spec.idle_burn_lph
+        lph = max(idle, shaft_kw * bsfc / 1000.0 / FUEL_DENSITY_KG_PER_L)
+        healthy_lph = max(idle, shaft_kw * healthy_bsfc / 1000.0 / FUEL_DENSITY_KG_PER_L)
+
+        # Report the BSFC that is actually implied by the burn, so the two can
+        # never disagree. Where the idle floor binds this rises steeply, which is
+        # the honest reading: fuel per unit of work is terrible at no load.
+        effective_bsfc = (
+            lph * FUEL_DENSITY_KG_PER_L * 1000.0 / shaft_kw if shaft_kw > 0 else 0.0
+        )
 
         return BurnEstimate(
             litres_per_hour=lph,
-            bsfc_g_per_kwh=bsfc,
+            bsfc_g_per_kwh=effective_bsfc,
             load_fraction=load_fraction,
             wear_multiplier=wear,
             wear_penalty_lph=lph - healthy_lph,

@@ -39,7 +39,16 @@ from services.speed.dataset import (
 )
 
 ARTIFACT_PATH = Path("models/fuel_degradation.joblib")
+ONNX_PATH = Path("models/fuel_degradation.onnx")
 MODEL_CARD_PATH = Path("models/fuel_degradation.card.json")
+
+ONNX_PARITY_TOLERANCE = 1e-4
+"""Maximum permitted disagreement between the trained model and its ONNX export.
+
+Float32 rounding alone lands around 1e-6. Anything approaching this bound means
+the conversion changed the model, and shipping it would put a different
+predictor in production from the one these metrics describe. The export fails
+loudly rather than warning."""
 
 HELD_OUT_STATE_FRACTION = 0.25
 RANDOM_SEED = 20260804  # the submission deadline; arbitrary, but fixed and stated
@@ -79,6 +88,56 @@ def _score(name: str, y_true: np.ndarray, y_pred: np.ndarray) -> Score:
         max_error_pct_of_fuel=float(err.max() * 100.0),
         r2=float(r2_score(y_true, y_pred)),
     )
+
+
+def export_onnx(model, X_sample: np.ndarray, path: Path = ONNX_PATH) -> float:
+    """Export the chosen model to ONNX and verify it still predicts the same thing.
+
+    **Why ONNX is the serving format.** The trained model is an XGBoost booster,
+    and loading it for inference drags in xgboost, scikit-learn, scipy and pandas
+    -- 358 MB of runtime for a 363 kB decision tree. ONNX Runtime alone is 40 MB
+    and needs none of them, which is the difference between fitting inside a
+    serverless function and not.
+
+    It is also the edge story from the technical profile made real: the same
+    artifact runs on the API and on a control unit aboard the vessel, with no
+    Python data-science stack installed on either.
+
+    Returns the maximum absolute prediction difference, which the caller records
+    in the model card so the claim is auditable rather than asserted.
+    """
+    import onnxruntime as ort
+    from onnxmltools.convert.common.data_types import FloatTensorType
+
+    initial_types = [("features", FloatTensorType([None, X_sample.shape[1]]))]
+
+    if isinstance(model, XGBRegressor):
+        from onnxmltools.convert import convert_xgboost
+
+        onnx_model = convert_xgboost(model, initial_types=initial_types, target_opset=15)
+    else:
+        from skl2onnx import convert_sklearn
+
+        onnx_model = convert_sklearn(model, initial_types=initial_types, target_opset=15)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(onnx_model.SerializeToString())
+
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    input_name = session.get_inputs()[0].name
+    sample = X_sample.astype(np.float32)
+
+    original = np.asarray(model.predict(sample)).ravel()
+    exported = np.asarray(session.run(None, {input_name: sample})[0]).ravel()
+    drift = float(np.abs(original - exported).max())
+
+    if drift > ONNX_PARITY_TOLERANCE:
+        raise RuntimeError(
+            f"ONNX export disagrees with the trained model by {drift:.2e} "
+            f"(tolerance {ONNX_PARITY_TOLERANCE:.0e}). The exported model is not "
+            "the model these metrics describe; refusing to ship it."
+        )
+    return drift
 
 
 def train(*, artifact_path: Path = ARTIFACT_PATH, verbose: bool = True) -> dict:
@@ -163,6 +222,23 @@ def train(*, artifact_path: Path = ARTIFACT_PATH, verbose: bool = True) -> dict:
     }
 
     chosen = model if best.name == "xgboost" else linear
+
+    # ONNX is the serving format; the joblib below is kept for retraining and
+    # inspection only. Nothing in apps/api loads the joblib.
+    onnx_drift = export_onnx(chosen, X_test[:512])
+    card["serving"] = {
+        "format": "onnx",
+        "artifact": str(ONNX_PATH),
+        "runtime": "onnxruntime",
+        "parity_max_abs_diff": onnx_drift,
+        "rationale": (
+            "Serving through xgboost/scikit-learn requires 358 MB of runtime for a "
+            "363 kB model. ONNX Runtime needs 40 MB and no data-science stack, which "
+            "is what lets the advisory API run as a serverless function and what the "
+            "profile's edge-inference claim actually rests on."
+        ),
+    }
+
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(
         {
@@ -178,6 +254,7 @@ def train(*, artifact_path: Path = ARTIFACT_PATH, verbose: bool = True) -> dict:
 
     if verbose:
         _report(ds, scores, by_name, best, artifact_path)
+        print(f"  -> {ONNX_PATH}  (serving format, parity {onnx_drift:.1e})\n")
     return card
 
 
