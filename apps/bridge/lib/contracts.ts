@@ -5,7 +5,7 @@
 //
 // The Python models in packages/contracts and apps/api are the single
 // source of truth. Change them and re-run; never hand-edit this file.
-// Generated from commit 622ab0c.
+// Generated from commit 504002e.
 
 export interface AnomalyStream {
   /** Field path, e.g. 'electro_mechanical.coolant_temp_c'. */
@@ -13,7 +13,7 @@ export interface AnomalyStream {
   /** Plain language. 'Engine coolant temperature', not the path. */
   label_en: string;
   label_fil: string;
-  /** Autoencoder error for this stream. */
+  /** PCA reconstruction residual for this stream -- a linear autoencoder's error. See docs/DEVIATIONS.md for why PCA, not a deep net. */
   reconstruction_error: number;
   /** Deviation from the learned baseline, in sigmas. */
   z_score: number;
@@ -57,13 +57,19 @@ export interface EmissionsOut {
 
 export type HullType = "fiberglass_monohull" | "fiberglass_outrigger" | "steel_monohull";
 
+export interface LatLonInput {
+  latitude: number;
+  longitude: number;
+  name?: string | null;
+}
+
 export type MaintenancePhase = "phase_1_cold_start" | "phase_2_mature";
 
 export interface MaintenanceStatus {
   vessel_id: string;
   generated_at: string;
   phase: MaintenancePhase;
-  /** 0 nominal, 1 strongly anomalous. Autoencoder + IsolationForest ensemble. */
+  /** 0 nominal, 1 strongly anomalous. Ensemble of a robust per-stream z-score and a PCA reconstruction error; see docs/DEVIATIONS.md. */
   anomaly_score: number;
   is_anomalous: boolean;
   /** Ranked by contribution_pct, descending. */
@@ -251,6 +257,19 @@ export interface SpeedRecommendation {
   advisory_source?: string | null;
 }
 
+export interface TelemetryFrame {
+  vessel_id: string;
+  /** Timezone-aware UTC. Validated on ingest. */
+  ts: string;
+  voyage_id?: string | null;
+  throttling?: ThrottlingFrame | null;
+  routing?: RoutingFrame | null;
+  electro_mechanical?: ElectroMechanicalFrame | null;
+  operator?: OperatorContext | null;
+  /** Provenance. 'simulator' for every frame in the hackathon build -- no hardware was used. Never silently defaults to 'sensor'. */
+  source?: string | null;
+}
+
 export interface ThrottlingFrame {
   /** Tank remaining, litres */
   fuel_level_l?: number | null;
@@ -340,6 +359,36 @@ export interface AdviseResponse {
   model_trained: boolean;
 }
 
+export interface RouteRequest {
+  vessel?: VesselInput | null;
+  origin: LatLonInput;
+  destination: LatLonInput;
+  /** Departure time; the forecast is read forward from it. None means now. */
+  depart_at?: string | null;
+  /** ETA budget for the whole voyage. None optimises fuel per mile, no schedule. */
+  minutes_available?: number | null;
+  passenger_count?: number | null;
+  cargo_kg?: number | null;
+  /** Exhaust temperature over this vessel's healthy baseline. 1.0 is as-new. */
+  egt_excess_ratio?: number | null;
+}
+
+export interface RouteResponse {
+  recommendation: RouteRecommendation;
+  /** False when the engine cannot hold the required speed on some leg; the route is still the cheapest lawful track, but arrival will be late. */
+  schedule_feasible: boolean;
+  /** False when no wear artifact is loaded; the fuel model then assumes a healthy engine. */
+  model_trained: boolean;
+}
+
+export interface MaintenanceRequest {
+  vessel_id?: string | null;
+  /** Recent frames, oldest first. A minute or two is plenty. */
+  frames: TelemetryFrame[];
+  /** This vessel's run-hours, which set cold-start confidence. None uses the baseline's own history count. */
+  observed_hours?: number | null;
+}
+
 export interface BridgeState {
   vessel_id: string;
   voyage_id?: string | null;
@@ -356,19 +405,6 @@ export interface BridgeState {
   language?: "en" | "fil" | null;
   /** Constant by design. Marine-AI never overrides the captain and never actuates the vessel. Rendered persistently on the display, not buried in a settings page. */
   advisory_only?: true | null;
-}
-
-export interface TelemetryFrame {
-  vessel_id: string;
-  /** Timezone-aware UTC. Validated on ingest. */
-  ts: string;
-  voyage_id?: string | null;
-  throttling?: ThrottlingFrame | null;
-  routing?: RoutingFrame | null;
-  electro_mechanical?: ElectroMechanicalFrame | null;
-  operator?: OperatorContext | null;
-  /** Provenance. 'simulator' for every frame in the hackathon build -- no hardware was used. Never silently defaults to 'sensor'. */
-  source?: string | null;
 }
 
 export interface VesselProfile {
